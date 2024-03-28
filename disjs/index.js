@@ -1,5 +1,6 @@
 const currentExports = {
     ...require('./client'),
+    ...require('./emoji'),
     ...require('./endpoints'),
     ...require('./errors'),
     ...require('./events'),

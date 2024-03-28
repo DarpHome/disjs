@@ -129,13 +129,13 @@ class Gateway extends EventEmitterExt {
             d.presences = !!options.presences;
         if (options.hasOwnProperty('userIds')) {
             if (isSnowflake(typeof options.userIds))
-                d.user_ids = new Snowflake(options.userIds).toString();
+                d.user_ids = Snowflake.stringFrom(options.userIds);
             else if (options.userIds instanceof Array)
-                d.user_ids = options.userIds.map(e => new Snowflake(e).toString());
+                d.user_ids = options.userIds.map(e => Snowflake.stringFrom(e));
             else
                 throw TypeError('cannot have both userIds and userId');
         } else if ((options.userId ?? null) === null) {
-            d.user_ids = new Snowflake(options.userId).toString();
+            d.user_ids = Snowflake.stringFrom(options.userId);
         }
         if (options.hasOwnProperty('nonce')) {
             d.nonce = options.nonce.toString();
@@ -147,9 +147,9 @@ class Gateway extends EventEmitterExt {
     updateVoiceState(guildId, channelId, options = {}) {
         let d = {
             guild_id: guildId.toString(),
-            channel_id: channelId === undefined || typeof channelId === 'null' ? null : channelId.toString(),
-            self_mute: options.hasOwnProperty('selfMute') ? !!options.selfMute : false,
-            self_deaf: options.hasOwnProperty('selfDeaf') ? !!options.selfDeaf : false,
+            channel_id: channelId ? channelId : null,
+            self_mute: options.selfMute ?? false,
+            self_deaf: options.selfDeaf ?? false,
         };
         this.logger?.debug('sending UPDATE_VOICE_STATE');
         this.send(4, d);

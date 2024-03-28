@@ -1,29 +1,28 @@
 const { versions } = require('process');
+const { NotImplemented } = require('./errors');
 const { Logger } = require('./logger');
+const { trimStart, trimEnd, trues } = require('./utils');
 
 function _flattenErrorDict(d, k2 = '') {
-    const items = [];
-    console.log(d);
+    let e = new Map();
     for (const [k1, v] of Object.entries(d)) {
-        const newKey = k2.length === 0 ? k1 : `${k2}.${k1}`;
-        if (v instanceof Object) {
-            const errors = v._errors;
-            if (errors instanceof Object) {
-                items.push([newKey, errors.map(x => typeof x.message === 'string' ? x.message : '').join(' ')]);
-            } else {
-                items.concat(...Object.entries(_flattenErrorDict(v, newKey)));
+        if (k1 === '_errors') {
+            for (const {code, message} of v) {
+                e.set(k2, [...(e.get(k2) ?? []), `${code}(${JSON.stringify(message)})`]);
             }
         } else {
-            items.push([newKey, v]);
+            const t1 = _flattenErrorDict(v, k2.length === 0 ? k1 : `${k2}.${k1}`);
+            for (const [k3, t2] of t1.entries())
+                for (const t3 of t2)
+                    e.set(k3, [...(e.get(k3) ?? []), t3]);
         }
-    }
-    return Object.fromEntries(items);
+    }    
+    return e;
 }
 
 class RESTError extends Error {
     constructor(response, j) {
         const status = response.status;
-        console.log(JSON.stringify(j));
         let code = 0;
         let text = '';
         if (j instanceof Object) {
@@ -31,20 +30,23 @@ class RESTError extends Error {
             const base = typeof j.message === 'string' ? j.message : '';
             let errors = j.errors;
             if (typeof errors === 'object') {
-                errors = _flattenErrorDict(errors);
-                const helpful = Object.entries(errors).map(p => `In ${p[0]}: ${p[1]}`).join('\n');
-                text = base + '\n' + helpful;
+                errors = _flattenErrorDict(errors, '$');
+                let helpful = [];
+                for (const [where, es] of errors.entries())
+                    for (const e of es)
+                        helpful.push(`In ${where} - ${e}`);
+                text = base + '\n' + helpful.join('\n');
             } else {
                 text = base;
             }
         } else {
             text = typeof j === 'string' ? j : '';
         }
-        let fmt = `${status} ${response.statusText} (error code: ${code})`;
+        let t = `${status} ${response.statusText} (error code: ${code})`;
         if (text !== '') {
-            fmt += `: ${text}`;
+            t += `: ${text}`;
         }
-        super(fmt);
+        super(t);
         this.response = response;
         this.status = response.status;
         this.code = code;
@@ -64,12 +66,127 @@ class DiscordError extends RESTError {}
 class InternalServerError extends DiscordError {}
 class BadGateway extends DiscordError {}
 
-function trimStart(s, c) {
-    const k = Array.from(c).map(d => d[0]);
-    while (k.some(c => s.startsWith(c))) {
-        s = s.slice(1);
+const httpStatuses = {
+    100: "Continue",
+    101: "Switching Protocols",
+    102: "Processing",
+    103: "Early Hints",
+
+    200: "OK",
+    201: "Created",
+    202: "Accepted",
+    203: "Non-Authoritative Information",
+    204: "No Content",
+    205: "Reset Content",
+    206: "Partial Content",
+    207: "Multi-Status",
+    208: "Already Reported",
+    226: "IM Used",
+
+    300: "Multiple Choices",
+    301: "Moved Permanently",
+    302: "Found",
+    303: "See Other",
+    304: "Not Modified",
+    307: "Temporary Redirect",
+    308: "Permanent Redirect",
+
+    400: "Bad Request",
+    401: "Unauthorized",
+    402: "Payment Required",
+    403: "Forbidden",
+    404: "Not Found",
+    405: "Method Not Allowed",
+    406: "Not Acceptable",
+    407: "Proxy Authentication Required",
+    408: "Request Timeout",
+    409: "Conflict",
+    410: "Gone",
+    411: "Length Required",
+    412: "Precondition Failed",
+    413: "Payload Too Large",
+    414: "URI Too Long",
+    415: "Unsupported Media Type",
+    416: "Range Not Satisfiable",
+    417: "Expectation Failed",
+    418: "I'm a teapot",
+    421: "Misdirected Request",
+    422: "Unprocessable Content",
+    423: "Locked",
+    424: "Failed Dependency",
+    425: "Too Early",
+    426: "Upgrade Required",
+    428: "Precondition Required",
+    429: "Too Many Requests",
+    431: "Request Header Fields Too Large",
+    451: "Unavailable For Legal Reasons",
+
+    500: "Internal Server Error",
+    501: "Not Implemented",
+    502: "Bad Gateway",
+    503: "Service Unavailable",
+    504: "Gateway Timeout",
+    505: "HTTP Version Not Supported",
+    506: "Variant Also Negotiates",
+    507: "Insufficient Storage",
+    508: "Loop Detected",
+    510: "Not Extended",
+    511: "Network Authentication Required",
+};
+
+class HTTPResponse {
+    async json() {
+        throw new NotImplemented();
     }
-    return s;
+
+    async text() {
+        throw new NotImplemented();
+    }
+
+    get status() {
+        throw new NotImplemented();
+    }
+
+    get statusText() {
+        return httpStatuses[this.status] ?? `Unknown status ${this.status}`;
+    }
+
+    getHeader(name) {
+        throw new NotImplemented();
+    }
+}
+
+class FetchResponse extends HTTPResponse {
+    constructor(_fetchResponse) {
+        super();
+        this._fetchResponse = _fetchResponse;
+    }
+
+    async json() {
+        return await this._fetchResponse.json();
+    }
+
+    async text() {
+        return await this._fetchResponse.text();
+    }
+
+    get status() {
+        return this._fetchResponse.status;
+    }
+
+    get statusText() {
+        return this._fetchResponse.statusText;
+    }
+
+    getHeader(name) {
+        return this._fetchResponse.headers.get(name);
+    }
+}
+
+class HTTPClient {
+    async perform(url, options) {
+        return new FetchResponse(await fetch(url, options));
+    }
 }
 
 class REST {
@@ -77,7 +194,9 @@ class REST {
         if (typeof options === 'string') {
             options = {token: options}
         }
-        this.token = options.token;
+        this.base = trimEnd(options.base ?? 'https://discord.com/api/v10', '/') + '/';
+        this.token = options.token ?? null;
+        this.httpClient = options.httpClient ?? new HTTPClient();
         this.logger = options.logger instanceof Logger ? options.logger : null;
     }
 
@@ -93,16 +212,18 @@ class REST {
         if (this.token !== null && (options.authenticate ?? true))
             headers['Authorization'] = this.token;
         let body = undefined;
-        if (options.hasOwnProperty('body') && options.hasOwnProperty('json')) {
+        if (trues(options.hasOwnProperty('body'), options.hasOwnProperty('json'), options.hasOwnProperty('form')) > 1) {
             throw new TypeError('cannot have both body and json');
         } else if (options.hasOwnProperty('body')) {
             body = options.body;
         } else if (options.hasOwnProperty('json')) {
             body = JSON.stringify(options.json);
             headers['Content-Type'] = 'application/json';
+        } else if (options.hasOwnProperty('form')) {
+            body = options.form;
         }
         headers = {...headers, ...options.headers ?? {}};
-        const url = 'https://discord.com/api/v10/' + trimStart(endpoint.path, '/') + (options.hasOwnProperty('queryParameters') ? ((params) => {
+        const url = this.base + trimStart(endpoint.path, '/') + (options.hasOwnProperty('queryParameters') ? ((params) => {
             if (!(params instanceof URLSearchParams)) {
                 params = new URLSearchParams(params);
             }
@@ -123,38 +244,37 @@ class REST {
                 .join('\n')
             }`);
         }
-        const response = await fetch(url, {
+        const response = await this.httpClient.perform(url, {
             method: endpoint.method,
             headers,
-            ...(body !== undefined ? {body} : {})
+            body,
         });
         this.logger?.trace(`received response with status ${response.status}`);
-        if (response.status >= 500) {
-            switch (response.status) {
-            case 500:
-                throw new InternalServerError(response, await response.json());
-            case 502:
-                throw new BadGateway(response, await response.json());
-            default:
-                throw new DiscordError(response, await response.json());
-            }
-        }
         if (response.status >= 400) {
+            const j = await (response.getHeader('content-type') === 'application/json'
+                ? response.json()
+                : response.text()); // cloudflare, why HTML on `/api` routes??
             switch (response.status) {
             case 401:
-                throw new Unauthorized(response, await response.json());
+                throw new Unauthorized(response, j);
             case 403:
-                throw new Forbidden(response, await response.json());
+                throw new Forbidden(response, j);
             case 404:
-                throw new NotFound(response, await response.json());
+                throw new NotFound(response, j);
             case 429:
-                throw new Ratelimited(response, await response.json());
+                throw new Ratelimited(response, j);
+            case 500:
+                throw new InternalServerError(response, j);
+            case 502:
+                throw new BadGateway(response, j);
             default:
-                throw new RESTError(response, await response.json());
+                if (response.status >= 503)
+                    throw new DiscordError(response, j);
+                throw new RESTError(response, j);
             }
         }
         return response;
     }
 }
 
-module.exports = {RESTError, Unauthorized, Forbidden, NotFound, Ratelimited, DiscordError, InternalServerError, BadGateway, REST};
+module.exports = {RESTError, Unauthorized, Forbidden, NotFound, Ratelimited, DiscordError, InternalServerError, BadGateway, HTTPResponse, HTTPClient, REST};

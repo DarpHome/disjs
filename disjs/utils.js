@@ -40,4 +40,37 @@ class EventEmitterExt extends EventEmitter {
     }
 }
 
-module.exports = {EventEmitterExt};
+function trimStart(s, c) {
+    const k = Array.from(c).map(d => d[0]);
+    if (k.length === 0)
+        return s;
+    else if (k.length === 1)
+        while (s.startsWith(k[0])) s = s.slice(1);
+    else
+        while (k.some(c => s.startsWith(c))) s = s.slice(1);
+    return s;
+}
+
+function trimEnd(s, c) {
+    const k = Array.from(c).map(d => d[0]);
+    if (k.length === 0)
+        return s;
+    else if (k.length === 1)
+        while (s.endsWith(k[0])) s = s.slice(0, s.length - 1);
+    else
+        while (k.some(c => s.endsWith(c))) s = s.slice(0, s.length - 1);
+    return s;
+}
+
+function trues(...xs) {
+    return xs.filter(x => x ? 1 : 0).reduce((x, y) => x + y, 0);
+}
+
+const _textEncoder = new TextEncoder();
+
+function blobFromText(s) {
+    return new Blob([_textEncoder.encode(s)]);
+}
+
+
+module.exports = {EventEmitterExt, trimStart, trimEnd, trues, blobFromText};

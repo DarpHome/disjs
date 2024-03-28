@@ -10,4 +10,10 @@ class GatewayError extends Error {
     }
 }
 
-module.exports = {TimeoutError, GatewayError};
+class NotImplemented extends Error {
+    constructor(message) {
+        super(message);
+    }
+}
+
+module.exports = {TimeoutError, GatewayError, NotImplemented};

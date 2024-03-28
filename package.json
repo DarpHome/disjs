@@ -4,7 +4,7 @@
   "description": "Discord API library for JavaScript",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
   "repository": {
     "type": "git",
@@ -25,5 +25,8 @@
   "homepage": "https://github.com/DarpHome/disjs#readme",
   "dependencies": {
     "ws": "^8.16.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0"
   }
 }

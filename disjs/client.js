@@ -143,8 +143,7 @@ class Client extends EventEmitterExt {
     }
     
     updateVoiceState(guildId, channelId, options = {}) {
-        const gid = new Snowflake(guildId);
-        return this.shards[this._shardFor(gid)].updateVoiceState(gid.toString(), new Snowflake(channelId).toString(), options);
+        return this.shards[this._shardFor(gid)].updateVoiceState(Snowflake.stringFrom(guildId), Snowflake.stringFrom(channelId), options);
     }
 
     updatePresence(options) {
